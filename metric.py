@@ -34,3 +34,4 @@ def compute_metrics(pred: EvalPrediction, model):
         "pearson": pearson_corr,
         "spearman": spearman_corr,
     }
+g
