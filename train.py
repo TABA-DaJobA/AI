@@ -13,17 +13,20 @@ from SimCSE.data_collator import SimCseDataCollatorWithPadding
 from SimCSE.trainers import CLTrainer
 import torch.distributed as dist
 
+# Load the entire training dataset
+
+# Split the training dataset into train and eval
+
 logger = logging.getLogger(__name__)
 
 # 변수 설정
 base = "klue/"
 name = "roberta-small"
 model_name = f"{base}{name}"
-train_batch_size = 256
+train_batch_size = 4
 step_num = 10
 OMP_NUM_THREADS = 8
 output_dir = "output/roberta-small"  # 출력 디렉토리 설정
-
 
 def main():
     # 데이터 인자와 훈련 인자를 초기화합니다.
@@ -42,12 +45,10 @@ def main():
         save_total_limit=6,
         logging_steps=step_num,
         save_steps=step_num,
-        do_eval=True,
+        do_eval=False,
         load_best_model_at_end=True,
         evaluation_strategy="steps",  # 평가 전략을 steps로 변경
     )
-
-    # ... (이후 코드는 그대로 유지)
 
     config = AutoConfig.from_pretrained(model_name)
     if "roberta" in model_name:
@@ -58,7 +59,7 @@ def main():
             cache_dir=None,
             revision=None,
             use_auth_token=None,
-            model_args=ModelArguments(do_mlm=False),  # 'do_mlm' 속성 설정
+            model_args=ModelArguments(do_mlm=True),  # 'do_mlm' 속성 설정
         )
     elif "bert" in model_name:
         model = BertForCL.from_pretrained(
@@ -68,7 +69,7 @@ def main():
             cache_dir=None,
             revision=None,
             use_auth_token=None,
-            model_args=ModelArguments(do_mlm=False),  # 'do_mlm' 속성 설정
+            model_args=ModelArguments(do_mlm=True),  # 'do_mlm' 속성 설정
         )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -84,7 +85,7 @@ def main():
         default_data_collator
         if data_args.pad_to_max_length
         else SimCseDataCollatorWithPadding(
-            tokenizer=tokenizer, data_args=data_args, model_args=ModelArguments(do_mlm=False)  # 'do_mlm' 속성 설정
+            tokenizer=tokenizer, data_args=data_args, model_args=ModelArguments(do_mlm=True)  # 'do_mlm' 속성 설정
         )
     )
 
@@ -92,18 +93,22 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=dev_dataset,
+        eval_dataset=dev_dataset,  # 검증 데이터셋 설정
         data_collator=data_collator,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
     )
-    trainer.train()
+
+    trainer.train()  # eval_dataset을 None으로 설정
 
     if training_args.do_eval:
-        if dev_dataset is not None:
-            eval_result_on_valid_set = trainer.evaluate(dev_dataset)
+        eval_dataset = dev_dataset if dev_dataset is not None else None
+        if eval_dataset is not None:
+            eval_result_on_valid_set = trainer.evaluate(eval_dataset)
             logger.info(
                 f"Evaluation Result on the valid set! #####\n{eval_result_on_valid_set}"
             )
+        # ...
+
         if test_dataset is not None:
             eval_result_on_test_set = trainer.evaluate(test_dataset)
             logger.info(

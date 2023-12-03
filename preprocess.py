@@ -30,7 +30,7 @@ logging.basicConfig(
 """
 채용공고_preprocess
 """
-job_dataset = pd.read_csv("train.csv")
+job_dataset = pd.read_csv("cop.csv")
 ##############
 data = []
 for job_text in tqdm(job_dataset):
