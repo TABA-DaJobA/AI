@@ -31,6 +31,9 @@ class CLTrainer(Trainer):
         eval_senteval_transfer: bool = False,
     ) -> Dict[str, float]:
         # eval_dataset = eval_dataset if not eval_dataset is None else self.eval_dataset
+        if eval_dataset is None:
+            logger.info("No eval_dataset provided, skipping evaluation.")
+            return {}
         self._memory_tracker.start()
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         start_time = time.time()

@@ -1,9 +1,11 @@
+import pandas as pd
+import torch
+
 from data.info import UnsupervisedSimCseFeatures, STSDatasetFeatures
 from functools import partial
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer,AutoModel
 from SimCSE.arguments import DataTrainingArguments
-
 from data.info import UnsupervisedSimCseFeatures, STSDatasetFeatures
 
 # 비감독전처리함수
@@ -70,6 +72,7 @@ def sts_prepare_features(examples, tokenizer, data_args):
     features["labels"] = scores
 
     return features
+
 
 def main(model_name_or_path, train_file, dev_file, test_file, save_dir):
     data_args = DataTrainingArguments(

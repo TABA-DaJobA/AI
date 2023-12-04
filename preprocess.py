@@ -1,3 +1,4 @@
+import torch
 from datasets import load_dataset
 import pandas as pd
 from tqdm import tqdm
@@ -21,6 +22,7 @@ from data.utils import (
     change_col_name,
     add_sts_df,
 )
+from transformers import AutoModel, AutoTokenizer
 
 import logging
 
@@ -30,10 +32,14 @@ logging.basicConfig(
 """
 채용공고_preprocess
 """
-job_dataset = pd.read_csv("cop.csv")
+
+df = pd.read_csv('cop.csv')
+df['MergedColumn'] = df[['Column1', 'Column2', 'Column3', 'Column4', 'Column5', 'Column6']].apply(lambda x: ' '.join(x.dropna().astype(str)), axis=1)
+
+job_dataset = df
 ##############
 data = []
-for job_text in tqdm(job_dataset):
+for job_text in tqdm(job_dataset["MergedColumn"]):
     job_text = job_text.replace(". ", ".\n")
     job_text = job_text.replace("\xa0", " ")
     job_sentences = job_text.split("\n")
@@ -97,9 +103,7 @@ preprocess_job_data_path = get_data_path(
 
 job_df = job_df.dropna(axis=0)
 job_df.to_csv(preprocess_job_data_path, index =False)
-#wiki_df = wiki_df.dropna(axis=0)
-#wiki_df.to_csv(preprocess_wiki_data_path, index=False)
-# wiki_df = pd.read_csv(preprocess_wiki_data_path)
+
 logging.info(
     f"preprocess job train done!\nfeatures:{job_df.columns} \nlen: {len(job_df)}\nna count:{sum(job_df[UnsupervisedSimCseFeatures.SENTENCE.value].isna())}"
 )
@@ -139,6 +143,51 @@ cop_df['sentence2'] = cop_df['sentence']
 
 #cop_test = cop_df
 
+
+
+"""
+자기소개서
+"""
+# 데이터셋 로드
+df = pd.read_csv('myself.csv')
+
+# 전처리한 데이터를 저장할 리스트
+data = []
+
+# 자기소개서 데이터 전처리
+for myself_text in tqdm(df['sentence1']):  # 열 이름이 'sentence1'로 가정
+    myself_text = str(myself_text) if not pd.isna(myself_text) else ""
+    myself_text = myself_text.replace(". ", ".\n")
+    myself_text = myself_text.replace("\xa0", " ")
+    myself_sentences = myself_text.split("\n")
+
+    for myself_sentence in myself_sentences:
+        myself_sentence = myself_sentence.strip()
+        if len(myself_sentence) >= 10:  # 길이 조건을 충족하는 문장만 선택
+            data.append(myself_sentence)
+
+# 전처리된 데이터로 DataFrame 생성
+myself_df = pd.DataFrame(data={UnsupervisedSimCseFeatures.SENTENCE.value: data})
+
+
+
+myself_df[UnsupervisedSimCseFeatures.SENTENCE.value] = myself_df[
+     UnsupervisedSimCseFeatures.SENTENCE.value
+ ].apply(job_preprocess)
+
+# 전처리된 데이터 저장
+preprocess_myself_data_path = get_data_path(
+     folder_path=train_floder_path,
+     data_source=DataName.PREPROCESS_MYSELF,
+     train_type=TrainType.TRAIN,
+     file_format=FileFormat.CSV,
+ )
+myself_df.to_csv(preprocess_myself_data_path, index=False)
+
+
+logging.info(
+    f"preprocess job train done! features:{myself_df.columns} \nlen: {len(myself_df)}\nna count:{sum(myself_df[UnsupervisedSimCseFeatures.SENTENCE.value].isna())}"
+)
 """
 klue_train = raw_data_to_dataframe(
     DataPath.ROOT, DataPath.RAW, DataName.RAW_KLUE, TrainType.TRAIN, FileFormat.JSON
@@ -230,6 +279,37 @@ sts_train_df.dropna(axis=0).to_csv(preprocess_sts_train_path, index=False)
 logging.info(
     f"preprocess sts train done!\nfeatures:{sts_train_df.columns} \nlen: {len(sts_train_df)}"
 )
+
+
+def load_data(csv_file):
+    return pd.read_csv(csv_file)
+
+
+def calculate_similarity(model, tokenizer, text1, text2):
+    inputs = tokenizer(text1, text2, return_tensors="pt", padding=True, truncation=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+        similarity_score = torch.nn.functional.cosine_similarity(outputs[0], outputs[1], dim=1).item()
+    return similarity_score
+
+
+def create_eval_dataset(myself_csv, job_csv, model_name):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
+
+    myself_data = load_data(myself_csv)
+    job_data = load_data(job_csv)
+
+    eval_examples = []
+    for intro, job_post in zip(myself_data["sentence"], job_data["sentence"]):
+        similarity_score = calculate_similarity(model, tokenizer, intro, job_post)
+        eval_examples.append({"sentence1": intro, "sentence2": job_post, "score": similarity_score})
+
+    return pd.DataFrame(eval_examples)
+
+
+eval_dataset = create_eval_dataset("path/to/myself.csv", "path/to/job_train.csv", "model_name")
+eval_dataset.to_csv("eval_dataset.csv", index=False)
 
 # sts_dev_df = kakao_dev[
 #     [

@@ -16,6 +16,7 @@ class DataName(Enum):
     PREPROCESS_TC = "tc_"
     PREPROCESS_ADD = "add_"
     PREPROCESS_JOB = "job_"
+    PREPROCESS_MYSELF = "myself_"
     #RAW_KLUE = "klue-sts-v1.1_"
     #RAW_KAKAO = "sts-"
     #RAW_TC = "ynat-v1.1_"
