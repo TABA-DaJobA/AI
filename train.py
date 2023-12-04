@@ -1,4 +1,6 @@
 import logging
+
+import torch
 from datasets import load_from_disk
 from transformers import (
     AutoConfig,
@@ -29,18 +31,22 @@ def main():
         test_file=None,  # 테스트 데이터 파일 경로를 None으로 설정
         pad_to_max_length=False,  # 이 값을 True로 설정하면 데이터 패딩이 적용됩니다.
     )
+    # GPU 사용 여부 확인
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     training_args = OurTrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=train_batch_size,
+        per_device_eval_batch_size=train_batch_size,
         learning_rate=5e-5,
         do_train=True,
         save_total_limit=6,
         logging_steps=step_num,
         save_steps=step_num,
-        evaluation_strategy="no",  # 평가 비활성화
-        eval_steps=0,  # 평가 스텝을 0으로 설정하여 평가 비활성화
-        load_best_model_at_end=False,  # EarlyStoppingCallback를 사용하지 않을 경우 False로 설정
+        evaluation_strategy="no",
+        eval_steps=0,
+        load_best_model_at_end=False,
     )
 
     config = AutoConfig.from_pretrained(model_name)

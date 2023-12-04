@@ -2,44 +2,64 @@ import pandas as pd
 import torch
 from transformers import AutoModel, AutoTokenizer
 from tqdm import tqdm
-from data.utils import get_data_path, get_folder_path
-from data.info import DataPath, DataName, TrainType, FileFormat
+import random
 
-def load_data(csv_file):
-    return pd.read_csv(csv_file)
+
+def load_data(file_path):
+    data = pd.read_csv(file_path)
+    sentences = data['sentence'].tolist()
+    return sentences
+
 
 def calculate_similarity(model, tokenizer, text1, text2):
-    inputs = tokenizer(text1, text2, return_tensors="pt", padding=True, truncation=True)
+    inputs = tokenizer([text1, text2], return_tensors="pt", padding=True, truncation=True)
     with torch.no_grad():
         outputs = model(**inputs)
-        similarity_score = torch.nn.functional.cosine_similarity(outputs[0], outputs[1], dim=1).item()
+        similarity_score = torch.nn.functional.cosine_similarity(outputs.last_hidden_state[0], outputs.last_hidden_state[1], dim=1)
     return similarity_score
 
-def create_eval_dataset(myself_csv, job_csv, model_name):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name)
 
-    myself_data = load_data(myself_csv)
-    job_data = load_data(job_csv)
+def create_eval_dataset(num_samples, model_path, job_sentences, myself_sentences):
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModel.from_pretrained(model_path)
 
     eval_examples = []
-    for intro, job_post in tqdm(zip(myself_data["sentence"], job_data["sentence"]), total=len(myself_data)):
-        similarity_score = calculate_similarity(model, tokenizer, intro, job_post)
-        eval_examples.append({"sentence1": intro, "sentence2": job_post, "score": similarity_score})
+    used_indexes = []  # 이미 선택된 문장의 인덱스를 추적하기 위한 리스트
+
+    for _ in tqdm(range(num_samples)):
+        # 랜덤하게 job_sentences에서 문장 선택
+        text1_index = random.randint(0, len(job_sentences) - 1)
+        text1 = job_sentences[text1_index]
+
+        # 랜덤하게 myself_sentences에서 문장 선택, 중복을 피하기 위해 이미 선택된 인덱스는 제외
+        text2_index = random.randint(0, len(myself_sentences) - 1)
+        while text2_index in used_indexes:
+            text2_index = random.randint(0, len(myself_sentences) - 1)
+
+        text2 = myself_sentences[text2_index]
+
+        # 이미 선택된 인덱스를 추가하여 중복 선택 방지
+        used_indexes.append(text2_index)
+
+        similarity_score = calculate_similarity(model, tokenizer, text1, text2)
+        eval_examples.append({"sentence1": text1, "sentence2": text2, "score": similarity_score})
 
     return pd.DataFrame(eval_examples)
 
+
 def main():
-    dev_folder_path = get_folder_path(DataPath.ROOT, DataPath.DEV)
-    eval_dataset = create_eval_dataset("data/train/myself_train.csv", "data/train/job_train.csv", "model_name")
-    eval_save_path = get_data_path(
-        folder_path=dev_folder_path,
-        data_source=DataName.PREPROCESS_MYSELF,  # 예시로 사용, 실제 상황에 맞게 수정 가능
-        train_type=TrainType.DEV,
-        file_format=FileFormat.CSV
-    )
-    eval_dataset.to_csv(eval_save_path, index=False)
-    print(f"Eval dataset saved to {eval_save_path}")
+    num_samples = 250  # 생성할 샘플 수를 지정하세요.
+    model_path = "output/roberta-small/best_model"  # 여기에 모델 경로를 지정하세요.
+
+    # job_train.csv와 myself_train.csv에서 문장 데이터를 가져옵니다.
+    job_sentences = load_data("data/train/job_train.csv")
+    myself_sentences = load_data("data/train/myself_train.csv")
+
+    eval_dataset = create_eval_dataset(num_samples, model_path, job_sentences, myself_sentences)
+
+    eval_dataset.to_csv("eval_dataset.csv", index=False)
+    print(f"Eval dataset saved to eval_dataset.csv")
 
 if __name__ == "__main__":
     main()
+
