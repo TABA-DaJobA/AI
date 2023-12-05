@@ -1,7 +1,6 @@
 import logging
-
 import torch
-from datasets import load_from_disk
+from datasets import load_from_disk, concatenate_datasets  # concatenate_datasets 추가
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -26,7 +25,7 @@ output_dir = "output/roberta-small"  # 출력 디렉토리 설정
 def main():
     # 데이터 인자와 훈련 인자를 초기화합니다.
     data_args = DataTrainingArguments(
-        train_file="data/datasets/train",
+        train_file=None,  # 이제 더 이상 훈련 파일을 직접 지정하지 않습니다.
         dev_file=None,  # 검증 데이터 파일 경로를 None으로 설정
         test_file=None,  # 테스트 데이터 파일 경로를 None으로 설정
         pad_to_max_length=False,  # 이 값을 True로 설정하면 데이터 패딩이 적용됩니다.
@@ -74,7 +73,10 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model.resize_token_embeddings(len(tokenizer))
 
-    train_dataset = load_from_disk("data/datasets/train")
+    # 두 데이터셋을 합칩니다.
+    dataset1 = load_from_disk("data/datasets/train")
+    dataset2 = load_from_disk("data/datasets1/train")
+    combined_dataset = concatenate_datasets([dataset1, dataset2])
 
     data_collator = (
         default_data_collator
@@ -87,7 +89,7 @@ def main():
     trainer = CLTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
+        train_dataset=combined_dataset,  # 합쳐진 데이터셋을 사용
         eval_dataset=None,  # eval 데이터셋을 None으로 설정
         data_collator=data_collator,
     )
